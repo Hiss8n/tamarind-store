@@ -1,0 +1,132 @@
+from decimal import Decimal
+from typing import Any
+
+from .database import get_connection
+
+
+def add_order(total_price: float, status: str = "pending") -> int:
+	"""Create an order and return its generated ID."""
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor()
+		cursor.execute(
+			"INSERT INTO orders (total_price, status) VALUES (%s, %s)",
+			(total_price, status),
+		)
+		order_id = cursor.lastrowid
+		connection.commit()
+		return int(order_id)
+	except Exception:
+		connection.rollback()
+		raise
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
+
+
+def add_to_cart(name: str, count: int, price: Decimal) -> dict[str, Any]:
+	"""Add a quantity of an item to the shared cart and return its totals."""
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor()
+		cursor.execute(
+			"""
+			INSERT INTO cart_items (item_name, item_count, price)
+			VALUES (%s, %s, %s)
+			ON DUPLICATE KEY UPDATE
+				item_count = item_count + VALUES(item_count),
+				price = VALUES(price)
+			""",
+			(name, count, price),
+		)
+		connection.commit()
+	except Exception:
+		connection.rollback()
+		raise
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
+	return get_cart()
+
+
+def get_cart() -> dict[str, Any]:
+	"""Return all cart items with line totals and the cart total."""
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor(dictionary=True)
+		cursor.execute("SELECT item_name, item_count, price FROM cart_items ORDER BY item_name")
+		rows = cursor.fetchall()
+		items = []
+		cart_total = Decimal("0.00")
+		for row in rows:
+			price = Decimal(row["price"])
+			line_total = price * row["item_count"]
+			items.append({
+				"name": row["item_name"],
+				"count": row["item_count"],
+				"price": price,
+				"total_price": line_total,
+			})
+			cart_total += line_total
+		return {"items": items, "total_price": cart_total}
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
+
+
+def remove_from_cart(name: str) -> bool:
+	"""Remove an item from the cart; the cart total is recalculated on read."""
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor()
+		cursor.execute("DELETE FROM cart_items WHERE item_name = %s", (name,))
+		removed = cursor.rowcount > 0
+		connection.commit()
+		return removed
+	except Exception:
+		connection.rollback()
+		raise
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
+
+
+def get_order_by_id(order_id: int) -> dict[str, Any] | None:
+	"""Return an order as a dictionary, or None if it does not exist."""
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor(dictionary=True)
+		cursor.execute("SELECT * FROM orders WHERE order_id = %s", (order_id,))
+		return cursor.fetchone()
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
+
+
+def remove_order(order_id: int) -> bool:
+	"""Delete an order by ID and return whether a row was deleted."""
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor()
+		cursor.execute("DELETE FROM orders WHERE order_id = %s", (order_id,))
+		deleted = cursor.rowcount > 0
+		connection.commit()
+		return deleted
+	except Exception:
+		connection.rollback()
+		raise
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
