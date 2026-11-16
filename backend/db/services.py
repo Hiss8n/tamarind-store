@@ -15,9 +15,9 @@ def add_to_cart(name: str, count: int, price: Decimal) -> dict[str, Any]:
 			"""
 			INSERT INTO cart_items (item_name, item_count, price)
 			VALUES (%s, %s, %s)
-			ON DUPLICATE KEY UPDATE
-				item_count = item_count + VALUES(item_count),
-				price = VALUES(price)
+			ON CONFLICT (item_name) DO UPDATE SET
+				item_count = cart_items.item_count + EXCLUDED.item_count,
+				price = EXCLUDED.price
 			""",
 			(name, count, price),
 		)
@@ -37,7 +37,7 @@ def get_cart() -> dict[str, Any]:
 	connection = get_connection()
 	cursor = None
 	try:
-		cursor = connection.cursor(dictionary=True)
+		cursor = connection.cursor()
 		cursor.execute("SELECT item_name, item_count, price FROM cart_items ORDER BY item_name")
 		rows = cursor.fetchall()
 		items = []
@@ -83,7 +83,7 @@ def get_order_by_id(order_id: int) -> dict[str, Any] | None:
 	connection = get_connection()
 	cursor = None
 	try:
-		cursor = connection.cursor(dictionary=True)
+		cursor = connection.cursor()
 		cursor.execute("SELECT * FROM orders WHERE order_id = %s", (order_id,))
 		return cursor.fetchone()
 	finally:
@@ -126,6 +126,7 @@ def create_checkout(checkout: CheckoutCreate) -> CheckoutRead:
 				INSERT INTO orders
 					(product_id, unit, total_price, status, payer_name, payer_phone)
 				VALUES (%s, %s, %s, %s, %s, %s)
+				RETURNING order_id
 				""",
 				(
 					item.product_id,
@@ -136,7 +137,7 @@ def create_checkout(checkout: CheckoutCreate) -> CheckoutRead:
 					payer_phone,
 				),
 			)
-			order_ids.append(int(cursor.lastrowid))
+			order_ids.append(int(cursor.fetchone()["order_id"]))
 		connection.commit()
 		return CheckoutRead(
 			order_ids=order_ids,
