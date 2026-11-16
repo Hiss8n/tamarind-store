@@ -21,9 +21,10 @@ app = CORSMiddleware(
 @api.post("/webhook")
 async def web_hook(req:Request):
     payload= await req.json()
+
     intent=payload["queryResult"]["intent"]["displayName"]
-    intent=payload["queryResult"]["parameters"]
-    intent=payload["queryResult"]["outputContexts"]
+    parameters=payload["queryResult"]["parameters"]
+    context_output=payload["queryResult"]["outputContexts"]
 
     if intent=="track.order-Context:response":
         return JSONResponse(content= {
