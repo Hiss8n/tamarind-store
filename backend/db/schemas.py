@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -55,19 +53,3 @@ class CheckoutRead(BaseModel):
 	payer_phone: str
 
 
-class CartItemCreate(BaseModel):
-	name: str = Field(min_length=1, max_length=120)
-	count: int = Field(gt=0)
-	price: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
-
-
-class CartItemRead(BaseModel):
-	name: str
-	count: int
-	price: Decimal
-	total_price: Decimal
-
-
-class CartRead(BaseModel):
-	items: list[CartItemRead]
-	total_price: Decimal

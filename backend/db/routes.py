@@ -1,41 +1,16 @@
 import logging
 
 from fastapi import APIRouter, HTTPException, status
-from .schemas import CartItemCreate, CartRead, CheckoutCreate, CheckoutRead, OrderRead
+from .schemas import CheckoutCreate, CheckoutRead, OrderRead
 from .services import (
-	add_to_cart,
 	create_checkout,
-	get_cart,
 	get_order_by_id,
-	remove_from_cart,
 	remove_order,
 )
 
 
 router = APIRouter(prefix="/orders", tags=["orders"])
-cart_router = APIRouter(prefix="/cart", tags=["cart"])
 logger = logging.getLogger(__name__)
-
-@cart_router.post("/items", response_model=CartRead)
-def add_cart_item(item: CartItemCreate) -> CartRead:
-	cart = add_to_cart(item.name, item.count, item.price)
-	return CartRead.model_validate(cart)
-
-
-@cart_router.get("", response_model=CartRead)
-def read_cart() -> CartRead:
-	return CartRead.model_validate(get_cart())
-
-
-@cart_router.delete("/items/{name}", response_model=CartRead)
-def delete_cart_item(name: str) -> CartRead:
-	if not remove_from_cart(name):
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Cart item not found",
-		)
-	return CartRead.model_validate(get_cart())
-
 
 @router.post("/", response_model=CheckoutRead, status_code=status.HTTP_201_CREATED)
 def place_order(checkout: CheckoutCreate) -> CheckoutRead:

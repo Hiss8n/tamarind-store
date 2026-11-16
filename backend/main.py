@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db.routes import cart_router, router as orders_router
+from db.routes import router as orders_router
 
 api = FastAPI()
 api.include_router(orders_router)
-api.include_router(cart_router)
 
 @api.get("/")
 async def read_root():
