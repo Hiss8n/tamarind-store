@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, status
+import logging
 
-from .schemas import CartItemCreate, CartRead, OrderCreate, OrderRead
+from fastapi import APIRouter, HTTPException, status
+from .schemas import CartItemCreate, CartRead, CheckoutCreate, CheckoutRead, OrderRead
 from .services import (
-	add_order,
 	add_to_cart,
+	create_checkout,
 	get_cart,
 	get_order_by_id,
 	remove_from_cart,
@@ -13,7 +14,7 @@ from .services import (
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 cart_router = APIRouter(prefix="/cart", tags=["cart"])
-
+logger = logging.getLogger(__name__)
 
 @cart_router.post("/items", response_model=CartRead)
 def add_cart_item(item: CartItemCreate) -> CartRead:
@@ -36,10 +37,16 @@ def delete_cart_item(name: str) -> CartRead:
 	return CartRead.model_validate(get_cart())
 
 
-@router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
-def create_order(order: OrderCreate) -> OrderRead:
-	order_id = add_order(order.total_price, order.status)
-	return OrderRead(order_id=order_id, **order.model_dump())
+@router.post("/", response_model=CheckoutRead, status_code=status.HTTP_201_CREATED)
+def place_order(checkout: CheckoutCreate) -> CheckoutRead:
+	try:
+		return create_checkout(checkout)
+	except Exception as error:
+		logger.exception("Failed to place order")
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail="Order could not be saved. Check the backend logs for details.",
+		) from error
 
 
 @router.get("/{order_id}", response_model=OrderRead)
@@ -61,3 +68,7 @@ def delete_order(order_id: int) -> dict[str, str]:
 			detail="Order not found",
 		)
 	return {"message": "Order deleted"}
+
+
+
+

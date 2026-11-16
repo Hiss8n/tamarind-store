@@ -1,4 +1,5 @@
 export type Product = {
+	product_id: number
 	name: string
 	description: string
 	price: number
@@ -9,6 +10,7 @@ export type Product = {
 
 export const products: Product[] = [
 	{
+		product_id: 1,
 		name: 'Cookies',
 		description: 'Soft, fermented sorghum flatbread',
 		price: 20,
@@ -17,6 +19,7 @@ export const products: Product[] = [
 		tag: 'House favorite',
 	},
 	{
+		product_id: 2,
 		name: 'Cold Drinks',
 		description: 'A chilled, sparkling refreshment',
 		price: 12,
@@ -25,6 +28,7 @@ export const products: Product[] = [
 		tag: 'Cold drinks',
 	},
 	{
+		product_id: 3,
 		name: 'Anjera',
 		description: 'Tender, tangy Ethiopian-style injera',
 		price: 15,
@@ -33,6 +37,7 @@ export const products: Product[] = [
 		tag: 'Made fresh',
 	},
 	{
+		product_id: 4,
 		name: 'Samosa',
 		description: 'Golden layered flatbread, made by hand',
 		price: 10,
@@ -41,6 +46,7 @@ export const products: Product[] = [
 		tag: 'Made fresh',
 	},
 	{
+		product_id: 5,
 		name: 'Salad',
 		description: 'Crisp greens, seasonal vegetables',
 		price: 16,
@@ -49,6 +55,7 @@ export const products: Product[] = [
 		tag: 'Plant-forward',
 	},
 	{
+		product_id: 6,
 		name: 'Spaghetti',
 		description: 'Slow-simmered tomato sauce, fresh herbs',
 		price: 17,

@@ -1,9 +1,18 @@
 import { create } from 'zustand'
 import { products } from '../data/products'
 
+
 type CheckoutDetails = {
 	name: string
 	phone: string
+}
+
+type CheckoutResult = {
+	order_ids: number[]
+	total_price: number
+	status: string
+	payer_name: string
+	payer_phone: string
 }
 
 type ProductStore = {
@@ -11,6 +20,7 @@ type ProductStore = {
 	error: string | null
 	isCheckingOut: boolean
 	checkoutComplete: boolean
+	checkoutResult: CheckoutResult | null
 	addToCart: (name: string) => void
 	removeFromCart: (name: string) => void
 	decreaseCartQuantity: (name: string) => void
@@ -29,6 +39,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 	error: null,
 	isCheckingOut: false,
 	checkoutComplete: false,
+	checkoutResult: null,
 	addToCart: (name) => {
 		const quantity = (get().quantities[name] ?? 0) + 1
 		const product = products.find((item) => item.name === name)
@@ -36,6 +47,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			quantities: { ...state.quantities, [name]: quantity },
 			error: null,
 			checkoutComplete: false,
+			checkoutResult: null,
 		}))
 		logDocument('cart item added', { name, quantity, price: product?.price })
 	},
@@ -43,7 +55,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 		set((state) => {
 			const quantities = { ...state.quantities }
 			delete quantities[name]
-			return { quantities, error: null, checkoutComplete: false }
+			return { quantities, error: null, checkoutComplete: false, checkoutResult: null }
 		})
 		logDocument('cart item removed', { name })
 	},
@@ -66,6 +78,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			quantities: { ...state.quantities, [name]: nextQuantity },
 			error: null,
 			checkoutComplete: false,
+			checkoutResult: null,
 		}))
 		logDocument('cart item updated', {
 			name,
@@ -80,13 +93,14 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			price: products.find((product) => product.name === name)?.price,
 		}))
 		logDocument('cart cleared', documents)
-		set({ quantities: {}, error: null, checkoutComplete: false })
+		set({ quantities: {}, error: null, checkoutComplete: false, checkoutResult: null })
 	},
 	checkout: async (details) => {
 		const quantities = get().quantities
 		const items = products
 			.filter((product) => (quantities[product.name] ?? 0) > 0)
 			.map((product) => ({
+				product_id: product.product_id,
 				name: product.name,
 				quantity: quantities[product.name],
 				price: product.price,
@@ -98,9 +112,34 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			return
 		}
 
-		set({ isCheckingOut: true, error: null, checkoutComplete: false })
-		logDocument('order submitted', { ...details, items, total })
-		set({ quantities: {}, checkoutComplete: true, isCheckingOut: false })
+		set({ isCheckingOut: true, error: null, checkoutComplete: false, checkoutResult: null })
+		logDocument('order submitted order sent to backend', { ...details, items, total })
+
+		try {
+			const apiUrl = import.meta.env.VITE_PUBLIC_URL.replace(/\/+$/, '')
+			const response = await fetch(`${apiUrl}/orders/`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					...details,
+					items,
+					total_price: total,
+					status: 'pending',
+				}),
+			})
+
+			if (!response.ok) {
+				const errorBody = await response.json().catch(() => null) as { detail?: string } | null
+				throw new Error(errorBody?.detail ?? 'Checkout could not be submitted. Please try again.')
+			}
+
+			const result = await response.json() as CheckoutResult
+			set({ quantities: {}, checkoutComplete: true, checkoutResult: result })
+		} catch (error) {
+			set({ error: error instanceof Error ? error.message : 'Checkout could not be submitted.' })
+		} finally {
+			set({ isCheckingOut: false })
+		}
 	},
 	clearError: () => set({ error: null }),
 }))

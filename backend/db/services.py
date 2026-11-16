@@ -1,29 +1,8 @@
 from decimal import Decimal
 from typing import Any
+from db.schemas import CheckoutCreate, CheckoutRead
 
 from .database import get_connection
-
-
-def add_order(total_price: float, status: str = "pending") -> int:
-	"""Create an order and return its generated ID."""
-	connection = get_connection()
-	cursor = None
-	try:
-		cursor = connection.cursor()
-		cursor.execute(
-			"INSERT INTO orders (total_price, status) VALUES (%s, %s)",
-			(total_price, status),
-		)
-		order_id = cursor.lastrowid
-		connection.commit()
-		return int(order_id)
-	except Exception:
-		connection.rollback()
-		raise
-	finally:
-		if cursor is not None:
-			cursor.close()
-		connection.close()
 
 
 def add_to_cart(name: str, count: int, price: Decimal) -> dict[str, Any]:
@@ -123,6 +102,49 @@ def remove_order(order_id: int) -> bool:
 		deleted = cursor.rowcount > 0
 		connection.commit()
 		return deleted
+	except Exception:
+		connection.rollback()
+		raise
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
+
+
+def create_checkout(checkout: CheckoutCreate) -> CheckoutRead:
+	payer_name = checkout.name.strip()
+	payer_phone = checkout.phone.strip()
+	connection = get_connection()
+	cursor = None
+	order_ids = []
+	try:
+		cursor = connection.cursor()
+		for item in checkout.items:
+			line_total = item.price * item.quantity
+			cursor.execute(
+				"""
+				INSERT INTO orders
+					(product_id, unit, total_price, status, payer_name, payer_phone)
+				VALUES (%s, %s, %s, %s, %s, %s)
+				""",
+				(
+					item.product_id,
+					item.quantity,
+					line_total,
+					checkout.status,
+					payer_name,
+					payer_phone,
+				),
+			)
+			order_ids.append(int(cursor.lastrowid))
+		connection.commit()
+		return CheckoutRead(
+			order_ids=order_ids,
+			total_price=sum(item.price * item.quantity for item in checkout.items),
+			status=checkout.status,
+			payer_name=payer_name,
+			payer_phone=payer_phone,
+		)
 	except Exception:
 		connection.rollback()
 		raise

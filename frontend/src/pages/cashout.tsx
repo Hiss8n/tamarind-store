@@ -12,6 +12,7 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 	const checkout = useProductStore((state) => state.checkout)
 	const isCheckingOut = useProductStore((state) => state.isCheckingOut)
 	const checkoutComplete = useProductStore((state) => state.checkoutComplete)
+	const checkoutResult = useProductStore((state) => state.checkoutResult)
 	const items = products.filter((product) => (quantities[product.name] ?? 0) > 0)
 	const subtotal = items.reduce((total, product) => total + product.price * quantities[product.name], 0)
 	const itemCount = Object.values(quantities).reduce((total, quantity) => total + quantity, 0)
@@ -32,9 +33,16 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 				<h1 id="cashout-title">Let’s make it yours.</h1>
 				<p className="section-intro">A few details, then your order is ready.</p>
 			</div>
-			{checkoutComplete && <p className="cashout-notice" role="status">Your checkout request was submitted successfully.</p>}
-
-			{items.length === 0 ? (
+			{checkoutComplete && checkoutResult ? (
+				<div className="empty-cart cashout-success" role="status">
+					<span className="empty-cart-mark" aria-hidden="true">✓</span>
+					<h2>Order placed successfully.</h2>
+					<p>Thanks, {checkoutResult.payer_name}. Your order has been received.</p>
+					<p>Order reference{checkoutResult.order_ids.length === 1 ? '' : 's'}: {checkoutResult.order_ids.join(', ')}</p>
+					<p>Total: ${checkoutResult.total_price.toFixed(2)} USD</p>
+					<button className="checkout-button" type="button" onClick={onBackToCart}>Return to your bag</button>
+				</div>
+			) : items.length === 0 ? (
 				<div className="empty-cart">
 					<span className="empty-cart-mark" aria-hidden="true">＋</span>
 					<h2>Your bag is empty.</h2>
