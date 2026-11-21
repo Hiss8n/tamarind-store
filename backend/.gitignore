@@ -1,7 +1,10 @@
 .env
-__pycache__.__pycache__
-__pycache__
-.venv
-Libs
-Scripts
-.lock
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+Lib/
+Scripts/
+*.lock
