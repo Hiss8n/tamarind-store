@@ -1,24 +1,52 @@
+import os
 from fastapi import FastAPI,Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from db.routes import router as orders_router 
 from fastapi.responses import JSONResponse
+from payment.mpesa import get_timestamp
+from payment.mpesa import get_access_token
+from payment.mpesa import get_password
+from payment.mpesa import format_phone
+from payment.mpesa import STKPushRequest
+from payment.mpesa import STKQueryRequest
+from payment.mpesa import BASE_URL
+from db.services import update_order_status
+import httpx
 
-api = FastAPI()
-api.include_router(orders_router)
 
-""" @api.get("/")
-async def read_root():
-    return {"message": "Hello World"}
- """
-app = CORSMiddleware(
-    app=api,
+CONSUMER_KEY = os.getenv("CONSUMER_KEY")
+CONSUMER_SECRET = os.getenv("CONSUMER_SECRET")
+SHORTCODE = os.getenv("SHORTCODE")          # Paybill or Till number
+PASSKEY = os.getenv("PASSKEY")              # Lipa Na M-Pesa Online passkey
+CALLBACK_URL = os.getenv("CALLBACK_URL")    # public HTTPS URL ending in /mpesa/callback
+MPESA_ENV = os.getenv("MPESA_ENV", "sandbox")
+# "CustomerPayBillOnline" for Paybill, "CustomerBuyGoodsOnline" for Till
+TRANSACTION_TYPE = os.getenv("TRANSACTION_TYPE", "CustomerPayBillOnline")
+
+BASE_URL = (
+    "https://api.safaricom.co.ke"
+    if MPESA_ENV == "production"
+    else "https://sandbox.safaricom.co.ke"
+)
+
+
+app = FastAPI()
+app.include_router(orders_router)
+
+app.add_middleware(
+    CORSMiddleware,
     allow_origins=["http://localhost:5173", "https://tamarind-store.vercel.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-@api.post("/webhook")
+@app.get("/")
+async def read_root():
+    return {"message": "Hello World"}
+
+
+@app.post("/webhook")
 async def web_hook(req:Request):
     payload= await req.json()
 
@@ -136,7 +164,139 @@ async def dialogflow_webhook(request: Request):
  """
 
 
+""" 
+get_shortcode() """
+
+#Mpesa api routes
 
 
+@app.post("/stkpush")
+async def stk_push(req: STKPushRequest):
+    if not all([CONSUMER_KEY, CONSUMER_SECRET, SHORTCODE, PASSKEY, CALLBACK_URL]):
+        raise HTTPException(status_code=503, detail="M-Pesa configuration is incomplete")
+
+    phone = format_phone(req.phone)
+    timestamp = get_timestamp()
+
+    payload = {
+        "BusinessShortCode": SHORTCODE,
+        "Password": get_password(timestamp),
+        "Timestamp": timestamp,
+        "TransactionType": TRANSACTION_TYPE,
+        "Amount": req.amount,
+        "PartyA": phone,
+        "PartyB": SHORTCODE,
+        "PhoneNumber": phone,
+        "CallBackURL": CALLBACK_URL,
+        "AccountReference": req.account_reference,
+        "TransactionDesc": req.description,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            token = await get_access_token(client)
+            resp = await client.post(
+                f"{BASE_URL}/mpesa/stkpush/v1/processrequest",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            data = resp.json()
+    except httpx.RequestError as error:
+        raise HTTPException(status_code=502, detail=f"Could not reach M-Pesa: {error}") from error
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=data)
+
+    checkout_request_id = data.get("CheckoutRequestID")
+    if checkout_request_id:
+        payment_transactions[checkout_request_id] = {
+            "order_ids": req.order_ids,
+            "phone": phone,
+            "amount": req.amount,
+            "status": "processing",
+        }
+
+    return {
+        "MerchantRequestID": data.get("MerchantRequestID"),
+        "CheckoutRequestID": checkout_request_id,
+        "ResponseCode": data.get("ResponseCode"),
+        "ResponseDescription": data.get("ResponseDescription"),
+        "CustomerMessage": data.get("CustomerMessage"),
+    }
+
+
+@app.post("/mpesa/callback")
+async def mpesa_callback(request: Request):
+    body = await request.json()
+    print("Callback received:", body)
+
+    cb = body.get("Body", {}).get("stkCallback", {})
+    checkout_request_id = cb.get("CheckoutRequestID")
+    result_code = cb.get("ResultCode")
+    transaction = payment_transactions.get(checkout_request_id, {})
+    order_ids = transaction.get("order_ids", [])
+
+    if result_code == 0:
+        items = cb.get("CallbackMetadata", {}).get("Item", [])
+        meta = {item["Name"]: item.get("Value") for item in items}
+        payment_transactions[checkout_request_id] = {
+            **transaction,
+            "status": "paid",
+            "receipt": meta.get("MpesaReceiptNumber"),
+            "amount": meta.get("Amount"),
+        }
+        update_order_status(order_ids, "paid")
+        print("PAYMENT SUCCESS:", {
+            "checkout_request_id": checkout_request_id,
+            "order_ids": order_ids,
+            "amount": meta.get("Amount"),
+            "receipt": meta.get("MpesaReceiptNumber"),
+            "phone": meta.get("PhoneNumber"),
+            "date": meta.get("TransactionDate"),
+        })
+    else:
+        payment_transactions[checkout_request_id] = {
+            **transaction,
+            "status": "failed",
+            "result_code": result_code,
+            "result_desc": cb.get("ResultDesc"),
+        }
+        update_order_status(order_ids, "failed")
+        print(f"PAYMENT FAILED [{result_code}]: {cb.get('ResultDesc')}")
+
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+@app.post("/stkquery")
+async def stk_query(req: STKQueryRequest):
+    timestamp = get_timestamp()
+    payload = {
+        "BusinessShortCode": SHORTCODE,
+        "Password": get_password(timestamp),
+        "Timestamp": timestamp,
+        "CheckoutRequestID": req.checkout_request_id,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            token = await get_access_token(client)
+            resp = await client.post(
+                f"{BASE_URL}/mpesa/stkpushquery/v1/query",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            data = resp.json()
+    except httpx.RequestError as error:
+        raise HTTPException(status_code=502, detail=f"Could not reach M-Pesa: {error}") from error
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=data)
+
+    local = payment_transactions.get(req.checkout_request_id)
+    return {**data, "local_status": local["status"] if local else None}
+
+
+# In-memory mapping used until callback processing is backed by a database table.
+payment_transactions: dict[str, dict] = {}
 
 

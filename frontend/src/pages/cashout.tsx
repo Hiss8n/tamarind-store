@@ -13,6 +13,7 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 	const isCheckingOut = useProductStore((state) => state.isCheckingOut)
 	const checkoutComplete = useProductStore((state) => state.checkoutComplete)
 	const checkoutResult = useProductStore((state) => state.checkoutResult)
+	const stkPushResult = useProductStore((state) => state.stkPushResult)
 	const items = products.filter((product) => (quantities[product.name] ?? 0) > 0)
 	const subtotal = items.reduce((total, product) => total + product.price * quantities[product.name], 0)
 	const itemCount = Object.values(quantities).reduce((total, quantity) => total + quantity, 0)
@@ -22,7 +23,7 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 		const formData = new FormData(event.currentTarget)
 		await checkout({
 			name: String(formData.get('name') ?? ''),
-			phone: `+254${String(formData.get('phone') ?? '')}`,
+			phone: String(formData.get('phone') ?? '').replace(/\s/g, ''),
 		})
 	}
 
@@ -40,6 +41,15 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 					<p>Thanks, {checkoutResult.payer_name}. Your order has been received.</p>
 					<p>Order reference{checkoutResult.order_ids.length === 1 ? '' : 's'}: {checkoutResult.order_ids.join(', ')}</p>
 					<p>Total: ${checkoutResult.total_price.toFixed(2)} USD</p>
+					{stkPushResult && (
+						<div className="mpesa-stk-push">
+							<p><strong>M-Pesa payment prompt sent.</strong></p>
+							<p>{stkPushResult.CustomerMessage}</p>
+							{stkPushResult.CheckoutRequestID && (
+								<small>Checkout request: {stkPushResult.CheckoutRequestID}</small>
+							)}
+						</div>
+					)}
 					<button className="checkout-button" type="button" onClick={onBackToCart}>Return to your bag</button>
 				</div>
 			) : items.length === 0 ? (
@@ -64,10 +74,9 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 						<label className="form-field">
 							<span>M-Pesa phone number</span>
 							<div className="phone-input-wrap">
-								<span className="phone-prefix">+254</span>
-								<input name="phone" type="tel" inputMode="tel" placeholder="7XX XXX XXX" autoComplete="tel-national" pattern="[0-9]{9}" aria-describedby="phone-hint" required />
+								<input name="phone" type="tel" inputMode="tel" placeholder="0700 667 399" autoComplete="tel-national" pattern="0[0-9]{9}" title="Enter a 10-digit M-Pesa number starting with 0, for example 0700667399" aria-describedby="phone-hint" required />
 							</div>
-							<small id="phone-hint">Enter 9 digits after +254.</small>
+							<small id="phone-hint">Enter 10 digits starting with 0, for example 0700667399.</small>
 						</label>
 
 						<div className="cashout-section-title payment-title">

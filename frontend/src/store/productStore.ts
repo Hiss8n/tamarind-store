@@ -15,12 +15,21 @@ type CheckoutResult = {
 	payer_phone: string
 }
 
+type StkPushResult = {
+	MerchantRequestID?: string
+	CheckoutRequestID?: string
+	ResponseCode?: string
+	ResponseDescription?: string
+	CustomerMessage?: string
+}
+
 type ProductStore = {
 	quantities: Record<string, number>
 	error: string | null
 	isCheckingOut: boolean
 	checkoutComplete: boolean
 	checkoutResult: CheckoutResult | null
+	stkPushResult: StkPushResult | null
 	addToCart: (name: string) => void
 	removeFromCart: (name: string) => void
 	decreaseCartQuantity: (name: string) => void
@@ -40,6 +49,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 	isCheckingOut: false,
 	checkoutComplete: false,
 	checkoutResult: null,
+	stkPushResult: null,
 	addToCart: (name) => {
 		const quantity = (get().quantities[name] ?? 0) + 1
 		const product = products.find((item) => item.name === name)
@@ -48,6 +58,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			error: null,
 			checkoutComplete: false,
 			checkoutResult: null,
+			stkPushResult: null,
 		}))
 		logDocument('cart item added', { name, quantity, price: product?.price })
 	},
@@ -134,7 +145,31 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			}
 
 			const result = await response.json() as CheckoutResult
-			set({ quantities: {}, checkoutComplete: true, checkoutResult: result })
+
+			const stkResponse = await fetch(`${apiUrl}/stkpush`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					phone: details.phone,
+					amount: Math.max(1, Math.ceil(result.total_price)),
+					account_reference: `ORDER-${result.order_ids[0]}`.slice(0, 12),
+					description: 'Tamarind payment',
+					order_ids: result.order_ids,
+				}),
+			})
+
+			if (!stkResponse.ok) {
+				const errorBody = await stkResponse.json().catch(() => null) as { detail?: string } | null
+				throw new Error(errorBody?.detail ?? 'M-Pesa payment could not be started.')
+			}
+
+			const stkResult = await stkResponse.json() as StkPushResult
+			set({
+				quantities: {},
+				checkoutComplete: true,
+				checkoutResult: result,
+				stkPushResult: stkResult,
+			})
 		} catch (error) {
 			set({ error: error instanceof Error ? error.message : 'Checkout could not be submitted.' })
 		} finally {

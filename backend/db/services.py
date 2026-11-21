@@ -78,3 +78,27 @@ def create_checkout(checkout: CheckoutCreate) -> CheckoutRead:
 		if cursor is not None:
 			cursor.close()
 		connection.close()
+
+
+def update_order_status(order_ids: list[int], status: str) -> int:
+	if not order_ids:
+		return 0
+
+	connection = get_connection()
+	cursor = None
+	try:
+		cursor = connection.cursor()
+		cursor.execute(
+			"UPDATE orders SET status = %s WHERE order_id = ANY(%s)",
+			(status, order_ids),
+		)
+		updated = cursor.rowcount
+		connection.commit()
+		return updated
+	except Exception:
+		connection.rollback()
+		raise
+	finally:
+		if cursor is not None:
+			cursor.close()
+		connection.close()
