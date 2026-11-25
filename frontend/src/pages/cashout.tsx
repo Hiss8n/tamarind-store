@@ -74,9 +74,9 @@ function Cashout({ quantities, products, onBackToCart }: CashoutProps) {
 						<label className="form-field">
 							<span>M-Pesa phone number</span>
 							<div className="phone-input-wrap">
-								<input name="phone" type="tel" inputMode="tel" placeholder="0700 667 399" autoComplete="tel-national" pattern="0[0-9]{9}" title="Enter a 10-digit M-Pesa number starting with 0, for example 0700667399" aria-describedby="phone-hint" required />
+								<input name="phone" type="tel" inputMode="numeric" placeholder="0712345678" autoComplete="tel-national" pattern="07[0-9]{8}" maxLength={10} title="Enter a 10-digit number starting with 07, for example 0712345678" aria-describedby="phone-hint" required />
 							</div>
-							<small id="phone-hint">Enter 10 digits starting with 0, for example 0700667399.</small>
+							<small id="phone-hint">Enter 10 digits starting with 07, for example 0712345678.</small>
 						</label>
 
 						<div className="cashout-section-title payment-title">

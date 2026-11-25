@@ -32,7 +32,6 @@ BASE_URL = (
     else "https://sandbox.safaricom.co.ke"
 )
 
-app = FastAPI(title="M-Pesa STK Push")
 
 
 # ---------- Schemas ----------
@@ -61,11 +60,13 @@ def get_password(timestamp: str) -> str:
 
 
 def format_phone(phone: str) -> str:
-    """07XXXXXXXX / 01XXXXXXXX / +2547XXXXXXXX -> 2547XXXXXXXX"""
-    p = phone.strip().replace(" ", "").replace("+", "")
-    if p.startswith("0"):
-        p = "254" + p[1:]
-    return p
+    """Validate 07XXXXXXXX and return the M-Pesa 254XXXXXXXXX format."""
+    if len(phone) != 10 or not phone.startswith("07") or not phone.isdigit():
+        raise HTTPException(
+            status_code=422,
+            detail="Phone number must be in the format 07XXXXXXXX",
+        )
+    return "254" + phone[1:]
 
 
 async def get_access_token(client: httpx.AsyncClient) -> str:
