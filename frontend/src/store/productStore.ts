@@ -140,8 +140,12 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 			})
 
 			if (!response.ok) {
-				const errorBody = await response.json().catch(() => null) as { detail?: string } | null
-				throw new Error(errorBody?.detail ?? 'Checkout could not be submitted. Please try again.')
+				const errorBody = await response.json().catch(() => null) as { detail?: string | { msg?: string }[] } | null
+				const detail = errorBody?.detail
+				const message = Array.isArray(detail)
+					? detail.map((issue) => issue.msg).filter(Boolean).join(' ')
+					: detail
+				throw new Error(message || 'Checkout could not be submitted. Please try again.')
 			}
 
 			const result = await response.json() as CheckoutResult
@@ -153,14 +157,18 @@ export const useProductStore = create<ProductStore>((set, get) => ({
 					phone: details.phone,
 					amount: Math.max(1, Math.ceil(result.total_price)),
 					account_reference: `ORDER-${result.order_ids[0]}`.slice(0, 12),
-					description: 'Tamarind payment',
+					description: 'Tamarind',
 					order_ids: result.order_ids,
 				}),
 			})
 
 			if (!stkResponse.ok) {
-				const errorBody = await stkResponse.json().catch(() => null) as { detail?: string } | null
-				throw new Error(errorBody?.detail ?? 'M-Pesa payment could not be started.')
+				const errorBody = await stkResponse.json().catch(() => null) as { detail?: string | { msg?: string }[] } | null
+				const detail = errorBody?.detail
+				const message = Array.isArray(detail)
+					? detail.map((issue) => issue.msg).filter(Boolean).join(' ')
+					: detail
+				throw new Error(message || 'M-Pesa payment could not be started.')
 			}
 
 			const stkResult = await stkResponse.json() as StkPushResult
